@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { CryptoCurrency, PriceHistory } from '../types/crypto';
 import { fetchCryptoPrices, fetchPriceHistory, CryptoWebSocket, WebSocketPriceUpdate } from '../services/cryptoApi';
 
@@ -11,7 +11,7 @@ export const useCrypto = () => {
   const [error, setError] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
 
-  const loadCryptoPrices = async () => {
+  const loadCryptoPrices = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -22,9 +22,9 @@ export const useCrypto = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadPriceHistory = async (coinId: string) => {
+  const loadPriceHistory = useCallback(async (coinId: string) => {
     try {
       setChartLoading(true);
       const data = await fetchPriceHistory(coinId);
@@ -35,9 +35,9 @@ export const useCrypto = () => {
     } finally {
       setChartLoading(false);
     }
-  };
+  }, []);
 
-  const handleWebSocketUpdate = (update: WebSocketPriceUpdate) => {
+  const handleWebSocketUpdate = useCallback((update: WebSocketPriceUpdate) => {
     console.log('WebSocket price update:', update);
     setCryptos(prevCryptos => 
       prevCryptos.map(crypto => {
@@ -51,12 +51,12 @@ export const useCrypto = () => {
         return crypto;
       })
     );
-  };
+  }, []);
 
-  const handleWebSocketConnectionChange = (connected: boolean) => {
+  const handleWebSocketConnectionChange = useCallback((connected: boolean) => {
     console.log('WebSocket connection status:', connected);
     setWsConnected(connected);
-  };
+  }, []);
 
   useEffect(() => {
     loadCryptoPrices();
@@ -65,31 +65,49 @@ export const useCrypto = () => {
     const ws = new CryptoWebSocket(handleWebSocketUpdate, handleWebSocketConnectionChange);
     ws.connect();
     
-    // Fallback: refresh every 60 seconds in case WebSocket fails
-    const interval = setInterval(loadCryptoPrices, 60000);
+    // Fallback: refresh every 120 seconds in case WebSocket fails
+    const interval = setInterval(loadCryptoPrices, 120000);
     
     return () => {
       clearInterval(interval);
       ws.disconnect();
       setWsConnected(false);
     };
-  }, []);
+  }, [loadCryptoPrices, handleWebSocketUpdate, handleWebSocketConnectionChange]);
 
   useEffect(() => {
     if (selectedCrypto) {
       loadPriceHistory(selectedCrypto);
     }
-  }, [selectedCrypto]);
+  }, [selectedCrypto, loadPriceHistory]);
 
-  return {
+  const setSelectedCryptoCallback = useCallback((cryptoId: string) => {
+    setSelectedCrypto(cryptoId);
+  }, []);
+
+  const refreshDataCallback = useCallback(() => {
+    loadCryptoPrices();
+  }, [loadCryptoPrices]);
+
+  return useMemo(() => ({
     cryptos,
     selectedCrypto,
-    setSelectedCrypto,
+    setSelectedCrypto: setSelectedCryptoCallback,
     priceHistory,
     loading,
     chartLoading,
     error,
     wsConnected,
-    refreshData: loadCryptoPrices
-  };
+    refreshData: refreshDataCallback
+  }), [
+    cryptos,
+    selectedCrypto,
+    setSelectedCryptoCallback,
+    priceHistory,
+    loading,
+    chartLoading,
+    error,
+    wsConnected,
+    refreshDataCallback
+  ]);
 };

@@ -44,6 +44,9 @@ export class CryptoWebSocket {
   private reconnectDelay = 1000;
   private onPriceUpdate: (update: WebSocketPriceUpdate) => void;
   private onConnectionChange: (connected: boolean) => void;
+  private pingInterval: number | null = null;
+  private lastUpdateTime: Record<string, number> = {};
+  private updateThrottle = 2000; // Throttle updates to every 2 seconds per symbol
 
   constructor(
     onPriceUpdate: (update: WebSocketPriceUpdate) => void,
@@ -66,22 +69,45 @@ export class CryptoWebSocket {
         console.log('WebSocket connected successfully');
         this.reconnectAttempts = 0;
         this.onConnectionChange(true);
+        
+        // Start ping interval to keep connection alive
+        this.pingInterval = window.setInterval(() => {
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ method: 'ping' }));
+          }
+        }, 30000); // Ping every 30 seconds
       };
       
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          console.log('WebSocket message received:', data);
+          
           if (data.stream && data.data) {
             const tickerData = data.data;
             const symbol = tickerData.s.toLowerCase();
             const coinGeckoId = REVERSE_BINANCE_MAP[symbol];
             
+            console.log('Processing ticker data:', {
+              symbol,
+              coinGeckoId,
+              price: tickerData.c,
+              priceChange: tickerData.P
+            });
+            
             if (coinGeckoId) {
-              this.onPriceUpdate({
-                symbol: coinGeckoId,
-                price: parseFloat(tickerData.c).toString(),
-                priceChangePercent: parseFloat(tickerData.P).toFixed(2)
-              });
+              // Throttle updates to prevent excessive re-renders
+              const now = Date.now();
+              const lastUpdate = this.lastUpdateTime[coinGeckoId] || 0;
+              
+              if (now - lastUpdate >= this.updateThrottle) {
+                this.lastUpdateTime[coinGeckoId] = now;
+                this.onPriceUpdate({
+                  symbol: coinGeckoId,
+                  price: parseFloat(tickerData.c).toString(),
+                  priceChangePercent: parseFloat(tickerData.P).toFixed(2)
+                });
+              }
             }
           }
         } catch (error) {
@@ -117,6 +143,10 @@ export class CryptoWebSocket {
   }
 
   disconnect() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
     if (this.ws) {
       this.ws.close();
       this.ws = null;

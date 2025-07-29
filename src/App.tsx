@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { RefreshCw, TrendingUp, AlertCircle } from "lucide-react";
 import { CryptoCard } from "./components/CryptoCard";
 import { PriceChart } from "./components/PriceChart";
@@ -25,6 +25,22 @@ function App() {
 
   const selectedCryptoData = cryptos.find(
     (crypto) => crypto.id === selectedCrypto
+  );
+
+  const memoizedCryptoCards = useMemo(
+    () => (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
+        {cryptos.map((crypto) => (
+          <CryptoCard
+            key={crypto.id}
+            crypto={crypto}
+            onClick={() => setSelectedCrypto(crypto.id)}
+            isSelected={selectedCrypto === crypto.id}
+          />
+        ))}
+      </div>
+    ),
+    [cryptos, selectedCrypto, setSelectedCrypto]
   );
 
   if (error) {
@@ -157,16 +173,7 @@ function App() {
         ) : (
           <>
             {/* Crypto Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
-              {cryptos.map((crypto) => (
-                <CryptoCard
-                  key={crypto.id}
-                  crypto={crypto}
-                  onClick={() => setSelectedCrypto(crypto.id)}
-                  isSelected={selectedCrypto === crypto.id}
-                />
-              ))}
-            </div>
+            {memoizedCryptoCards}
 
             {/* Chart */}
             <div className="mb-8">
